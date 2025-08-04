@@ -43,6 +43,8 @@ jobs:
     needs: check-version
     if: needs.check-version.outputs.version-changed == 'true'
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       
@@ -76,14 +78,31 @@ jobs:
         run: |
           mkdir -p release-assets
           
-          # Find the burrito executables
-          find _build/prod/rel/focus/burrito_out -name "focus*" -type f -executable | while read file; do
-            filename=$(basename "$file")
-            cp "$file" "release-assets/$filename"
-          done
+          # Debug: Show what was built
+          echo "=== Build output structure ==="
+          find _build -name "*focus*" -type f
+          
+          echo "=== Looking for burrito output ==="
+          find _build -path "*/burrito_out/*" -type f
+          
+          # Copy burrito executables
+          if [ -d "_build/prod/rel/focus/burrito_out" ]; then
+            find _build/prod/rel/focus/burrito_out -name "focus*" -type f -executable | while read file; do
+              filename=$(basename "$file")
+              cp "$file" "release-assets/$filename"
+            done
+          else
+            echo "Burrito output directory not found, checking alternate locations..."
+            # Sometimes burrito puts files in different locations
+            find _build -name "focus*" -type f -executable | grep -v "/erts-" | while read file; do
+              filename=$(basename "$file")
+              cp "$file" "release-assets/$filename"
+            done
+          fi
           
           # List what we have
-          ls -la release-assets/
+          echo "=== Release assets ==="
+          ls -la release-assets/ || echo "No release assets found"
       
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
