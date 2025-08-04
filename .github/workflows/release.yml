@@ -117,12 +117,21 @@ jobs:
             ### Downloads
             - **focus-darwin-x86_64**: For Intel Macs
             - **focus-darwin-aarch64**: For Apple Silicon Macs (M1/M2/M3)
+            - **focus-linux-x86_64**: For Linux (64-bit)
+            - **focus-windows-x86_64.exe**: For Windows (64-bit)
             
             ### Usage
+            
+            **macOS/Linux:**
             ```bash
             # Make executable and run
             chmod +x focus-*
             ./focus-* [work|break|<minutes>]
+            ```
+            
+            **Windows:**
+            ```cmd
+            focus-windows-x86_64.exe [work|break|<minutes>]
             ```
           files: release-assets/*
           draft: false
