@@ -1,0 +1,112 @@
+name: Create Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version-changed: ${{ steps.version-check.outputs.changed }}
+      new-version: ${{ steps.version-check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Check if version changed
+        id: version-check
+        run: |
+          # Get current version from mix.exs
+          CURRENT_VERSION=$(grep 'version:' mix.exs | sed 's/.*version: "\(.*\)".*/\1/')
+          echo "Current version: $CURRENT_VERSION"
+          
+          # Get previous version from mix.exs
+          git checkout HEAD~1 -- mix.exs 2>/dev/null || echo "No previous version found"
+          PREVIOUS_VERSION=$(grep 'version:' mix.exs | sed 's/.*version: "\(.*\)".*/\1/' 2>/dev/null || echo "0.0.0")
+          echo "Previous version: $PREVIOUS_VERSION"
+          
+          # Restore current mix.exs
+          git checkout HEAD -- mix.exs
+          
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "Version unchanged"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-release:
+    needs: check-version
+    if: needs.check-version.outputs.version-changed == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.18.1'
+          otp-version: '27.1'
+      
+      - name: Set up Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.14.1
+      
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      
+      - name: Install dependencies
+        run: mix deps.get
+      
+      - name: Build releases
+        run: mix release --overwrite
+        env:
+          MIX_ENV: prod
+      
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          
+          # Find the burrito executables
+          find _build/prod/rel/focus/burrito_out -name "focus*" -type f -executable | while read file; do
+            filename=$(basename "$file")
+            cp "$file" "release-assets/$filename"
+          done
+          
+          # List what we have
+          ls -la release-assets/
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ needs.check-version.outputs.new-version }}"
+          name: "Release v${{ needs.check-version.outputs.new-version }}"
+          body: |
+            ## Focus v${{ needs.check-version.outputs.new-version }}
+            
+            A simple command-line pomodoro timer.
+            
+            ### Downloads
+            - **focus-darwin-x86_64**: For Intel Macs
+            - **focus-darwin-aarch64**: For Apple Silicon Macs (M1/M2/M3)
+            
+            ### Usage
+            ```bash
+            # Make executable and run
+            chmod +x focus-*
+            ./focus-* [work|break|<minutes>]
+            ```
+          files: release-assets/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
