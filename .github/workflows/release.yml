@@ -97,23 +97,55 @@ jobs:
           echo "=== Searching for executables ==="
           find _build -type f -executable | grep -v "/erts-" || echo "No executables found"
           
-          # Copy all focus executables we can find
+          # Map Burrito output files to platform-specific names
           FOUND_FILES=0
-          for file in $(find _build -name "focus*" -type f 2>/dev/null); do
-            if [ -f "$file" ] && [ -x "$file" ]; then
-              filename=$(basename "$file")
-              echo "Copying executable: $file -> release-assets/$filename"
-              cp "$file" "release-assets/$filename"
-              chmod +x "release-assets/$filename"
-              FOUND_FILES=$((FOUND_FILES + 1))
-            elif [ -f "$file" ]; then
-              filename=$(basename "$file")
-              echo "Copying file (not executable): $file -> release-assets/$filename"
-              cp "$file" "release-assets/$filename"
-              chmod +x "release-assets/$filename"
-              FOUND_FILES=$((FOUND_FILES + 1))
-            fi
-          done
+          
+          # Find and copy burrito output files with proper names
+          if [ -d "_build/prod/rel/focus/burrito_out" ]; then
+            cd _build/prod/rel/focus/burrito_out
+            
+            # Map each target to its platform-specific name
+            for file in *; do
+              if [ -f "$file" ]; then
+                case "$file" in
+                  *darwin*x86_64* | focus_macos | focus.app)
+                    target_name="focus-darwin-x86_64"
+                    ;;
+                  *darwin*aarch64* | focus_macos_m1)
+                    target_name="focus-darwin-aarch64"
+                    ;;
+                  *linux*x86_64* | focus_linux)
+                    target_name="focus-linux-x86_64"
+                    ;;
+                  *windows*x86_64* | focus_windows | focus.exe | focus.bat)
+                    target_name="focus-windows-x86_64.exe"
+                    ;;
+                  *)
+                    # Fallback: try to infer from path or use generic name
+                    target_name="focus-unknown-$file"
+                    ;;
+                esac
+                
+                echo "Copying: $file -> $target_name"
+                cp "$file" "../../../../../release-assets/$target_name"
+                chmod +x "../../../../../release-assets/$target_name"
+                FOUND_FILES=$((FOUND_FILES + 1))
+              fi
+            done
+            
+            cd - > /dev/null
+          else
+            # Fallback: search in all build dirs
+            for file in $(find _build -name "focus*" -type f 2>/dev/null); do
+              if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                echo "Copying (fallback): $file -> release-assets/$filename"
+                cp "$file" "release-assets/$filename"
+                chmod +x "release-assets/$filename"
+                FOUND_FILES=$((FOUND_FILES + 1))
+              fi
+            done
+          fi
           
           echo "=== Found $FOUND_FILES files ==="
           
