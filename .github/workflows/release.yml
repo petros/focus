@@ -78,100 +78,105 @@ jobs:
         run: |
           mkdir -p release-assets
           
-          # Debug: Show complete build structure
-          echo "=== Complete build directory structure ==="
-          find _build -type f | sort
-          
-          echo "=== All focus-related files ==="
+          # Debug: Show build structure
+          echo "=== Build directory structure ==="
           find _build -name "*focus*" -type f -ls
           
-          echo "=== Burrito output directory check ==="
-          if [ -d "_build/prod/rel/focus/burrito_out" ]; then
-            echo "Burrito output directory exists:"
-            ls -la _build/prod/rel/focus/burrito_out/
-            find _build/prod/rel/focus/burrito_out -type f -ls
-          else
-            echo "Burrito output directory not found"
-          fi
-          
-          echo "=== Searching for executables ==="
-          find _build -type f -executable | grep -v "/erts-" || echo "No executables found"
-          
-          # Map Burrito output files to platform-specific names
+          # Initialize counters
           FOUND_FILES=0
           
-          # Find and copy burrito output files with proper names
-          if [ -d "_build/prod/rel/focus/burrito_out" ]; then
-            cd _build/prod/rel/focus/burrito_out
-            
-            # Map each target to its platform-specific name
-            for file in *; do
-              if [ -f "$file" ]; then
-                case "$file" in
-                  *darwin*x86_64* | focus_macos | focus.app)
-                    target_name="focus-darwin-x86_64"
-                    ;;
-                  *darwin*aarch64* | focus_macos_m1)
-                    target_name="focus-darwin-aarch64"
-                    ;;
-                  *linux*x86_64* | focus_linux)
-                    target_name="focus-linux-x86_64"
-                    ;;
-                  *windows*x86_64* | focus_windows | focus.exe | focus.bat)
-                    target_name="focus-windows-x86_64.exe"
-                    ;;
-                  *)
-                    # Fallback: try to infer from path or use generic name
-                    target_name="focus-unknown-$file"
-                    ;;
-                esac
+          # Find and process each platform's executable
+          find _build -name "focus*" -type f 2>/dev/null | while IFS= read -r filepath; do
+            if [ -f "$filepath" ]; then
+              filename=$(basename "$filepath")
+              filetype=$(file "$filepath" 2>/dev/null || echo "unknown")
+              
+              echo "Processing: $filepath"
+              echo "File type: $filetype"
+              
+              # Determine platform and final executable name
+              platform=""
+              executable_name=""
+              
+              if echo "$filetype" | grep -qi "mach-o.*x86_64"; then
+                platform="darwin-x86_64"
+                executable_name="focus"
+              elif echo "$filetype" | grep -qi "mach-o.*arm64\|mach-o.*aarch64"; then
+                platform="darwin-aarch64"
+                executable_name="focus"
+              elif echo "$filetype" | grep -qi "elf.*x86-64"; then
+                platform="linux-x86_64"
+                executable_name="focus"
+              elif echo "$filetype" | grep -qi "pe32\|ms-dos" || [[ "$filename" == *.exe ]]; then
+                platform="windows-x86_64"
+                executable_name="focus.exe"
+              elif [[ "$filename" == *.bat ]]; then
+                platform="windows-x86_64"
+                executable_name="focus.exe"
+              elif [[ "$filename" == "focus.rel" ]]; then
+                # Erlang release file - assume Linux
+                platform="linux-x86_64"
+                executable_name="focus"
+              else
+                echo "Skipping unknown file: $filename"
+                continue
+              fi
+              
+              if [ -n "$platform" ] && [ -n "$executable_name" ]; then
+                # Create temporary directory for this platform
+                temp_dir="release-assets/temp-$platform"
+                mkdir -p "$temp_dir"
                 
-                echo "Copying: $file -> $target_name"
-                cp "$file" "../../../../../release-assets/$target_name"
-                chmod +x "../../../../../release-assets/$target_name"
-                FOUND_FILES=$((FOUND_FILES + 1))
+                # Copy file with correct name
+                echo "Creating $platform: $executable_name"
+                cp "$filepath" "$temp_dir/$executable_name"
+                chmod +x "$temp_dir/$executable_name"
+                
+                # Create the zip file
+                cd "$temp_dir"
+                zip "../focus-$platform.zip" "$executable_name"
+                cd - > /dev/null
+                
+                # Clean up temp directory
+                rm -rf "$temp_dir"
+                
+                echo $(($(cat /tmp/found_files_count 2>/dev/null || echo 0) + 1)) > /tmp/found_files_count
               fi
-            done
-            
-            cd - > /dev/null
-          else
-            # Fallback: search in all build dirs
-            for file in $(find _build -name "focus*" -type f 2>/dev/null); do
-              if [ -f "$file" ]; then
-                filename=$(basename "$file")
-                echo "Copying (fallback): $file -> release-assets/$filename"
-                cp "$file" "release-assets/$filename"
-                chmod +x "release-assets/$filename"
-                FOUND_FILES=$((FOUND_FILES + 1))
-              fi
-            done
+            fi
+          done
+          
+          FOUND_FILES=$(cat /tmp/found_files_count 2>/dev/null || echo "0")
+          rm -f /tmp/found_files_count
+          
+          echo "=== Created $FOUND_FILES platform archives ==="
+          echo "=== Final zip files ==="
+          ls -la release-assets/*.zip || echo "No zip files created"
+          
+          # Verify we have the expected 4 files
+          expected_files=(
+            "release-assets/focus-darwin-x86_64.zip"
+            "release-assets/focus-darwin-aarch64.zip" 
+            "release-assets/focus-linux-x86_64.zip"
+            "release-assets/focus-windows-x86_64.zip"
+          )
+          
+          missing_files=()
+          for expected_file in "${expected_files[@]}"; do
+            if [ ! -f "$expected_file" ]; then
+              missing_files+=("$expected_file")
+            fi
+          done
+          
+          if [ ${#missing_files[@]} -gt 0 ]; then
+            echo "WARNING: Missing expected files:"
+            printf '%s\n' "${missing_files[@]}"
           fi
           
-          echo "=== Found $FOUND_FILES files ==="
-          
-          # List what we have in release assets
-          echo "=== Final release assets ==="
-          ls -la release-assets/ || echo "Release assets directory is empty"
-          
-          # Fail if no files found
           if [ $FOUND_FILES -eq 0 ]; then
             echo "ERROR: No focus executables found!"
             exit 1
           fi
       
-      - name: Create zip archives
-        run: |
-          cd release-assets
-          for file in *; do
-            if [ -f "$file" ]; then
-              echo "Creating zip for: $file"
-              zip "${file}.zip" "$file"
-            fi
-          done
-          
-          # List final zip files
-          echo "=== Created zip files ==="
-          ls -la *.zip
       
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -188,7 +193,7 @@ jobs:
             - **focus-darwin-x86_64.zip**: For Intel Macs
             - **focus-darwin-aarch64.zip**: For Apple Silicon Macs (M1/M2/M3)
             - **focus-linux-x86_64.zip**: For Linux (64-bit)
-            - **focus-windows-x86_64.exe.zip**: For Windows (64-bit)
+            - **focus-windows-x86_64.zip**: For Windows (64-bit)
             
             ### Usage
             
