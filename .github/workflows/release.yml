@@ -78,31 +78,54 @@ jobs:
         run: |
           mkdir -p release-assets
           
-          # Debug: Show what was built
-          echo "=== Build output structure ==="
-          find _build -name "*focus*" -type f
+          # Debug: Show complete build structure
+          echo "=== Complete build directory structure ==="
+          find _build -type f | sort
           
-          echo "=== Looking for burrito output ==="
-          find _build -path "*/burrito_out/*" -type f
+          echo "=== All focus-related files ==="
+          find _build -name "*focus*" -type f -ls
           
-          # Copy burrito executables
+          echo "=== Burrito output directory check ==="
           if [ -d "_build/prod/rel/focus/burrito_out" ]; then
-            find _build/prod/rel/focus/burrito_out -name "focus*" -type f -executable | while read file; do
-              filename=$(basename "$file")
-              cp "$file" "release-assets/$filename"
-            done
+            echo "Burrito output directory exists:"
+            ls -la _build/prod/rel/focus/burrito_out/
+            find _build/prod/rel/focus/burrito_out -type f -ls
           else
-            echo "Burrito output directory not found, checking alternate locations..."
-            # Sometimes burrito puts files in different locations
-            find _build -name "focus*" -type f -executable | grep -v "/erts-" | while read file; do
-              filename=$(basename "$file")
-              cp "$file" "release-assets/$filename"
-            done
+            echo "Burrito output directory not found"
           fi
           
-          # List what we have
-          echo "=== Release assets ==="
-          ls -la release-assets/ || echo "No release assets found"
+          echo "=== Searching for executables ==="
+          find _build -type f -executable | grep -v "/erts-" || echo "No executables found"
+          
+          # Copy all focus executables we can find
+          FOUND_FILES=0
+          for file in $(find _build -name "focus*" -type f 2>/dev/null); do
+            if [ -f "$file" ] && [ -x "$file" ]; then
+              filename=$(basename "$file")
+              echo "Copying executable: $file -> release-assets/$filename"
+              cp "$file" "release-assets/$filename"
+              chmod +x "release-assets/$filename"
+              FOUND_FILES=$((FOUND_FILES + 1))
+            elif [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "Copying file (not executable): $file -> release-assets/$filename"
+              cp "$file" "release-assets/$filename"
+              chmod +x "release-assets/$filename"
+              FOUND_FILES=$((FOUND_FILES + 1))
+            fi
+          done
+          
+          echo "=== Found $FOUND_FILES files ==="
+          
+          # List what we have in release assets
+          echo "=== Final release assets ==="
+          ls -la release-assets/ || echo "Release assets directory is empty"
+          
+          # Fail if no files found
+          if [ $FOUND_FILES -eq 0 ]; then
+            echo "ERROR: No focus executables found!"
+            exit 1
+          fi
       
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
