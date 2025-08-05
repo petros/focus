@@ -127,6 +127,20 @@ jobs:
             exit 1
           fi
       
+      - name: Create zip archives
+        run: |
+          cd release-assets
+          for file in *; do
+            if [ -f "$file" ]; then
+              echo "Creating zip for: $file"
+              zip "${file}.zip" "$file"
+            fi
+          done
+          
+          # List final zip files
+          echo "=== Created zip files ==="
+          ls -la *.zip
+      
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -138,25 +152,28 @@ jobs:
             A simple command-line focus timer that helps you focus on work.
             
             ### Downloads
-            - **focus-darwin-x86_64**: For Intel Macs
-            - **focus-darwin-aarch64**: For Apple Silicon Macs (M1/M2/M3)
-            - **focus-linux-x86_64**: For Linux (64-bit)
-            - **focus-windows-x86_64.exe**: For Windows (64-bit)
+            Download and extract the appropriate zip file for your platform:
+            - **focus-darwin-x86_64.zip**: For Intel Macs
+            - **focus-darwin-aarch64.zip**: For Apple Silicon Macs (M1/M2/M3)
+            - **focus-linux-x86_64.zip**: For Linux (64-bit)
+            - **focus-windows-x86_64.exe.zip**: For Windows (64-bit)
             
             ### Usage
             
             **macOS/Linux:**
             ```bash
-            # Make executable and run
-            chmod +x focus-*
-            ./focus-* [work|break|<minutes>]
+            # Extract and make executable
+            unzip focus-*.zip
+            chmod +x focus*
+            ./focus* [work|break|<minutes>]
             ```
             
             **Windows:**
             ```cmd
+            # Extract the zip file, then run:
             focus-windows-x86_64.exe [work|break|<minutes>]
             ```
-          files: release-assets/*
+          files: release-assets/*.zip
           draft: false
           prerelease: false
         env:
