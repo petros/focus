@@ -1,6 +1,6 @@
 defmodule Focus.Timer do
   @moduledoc """
-  Timer functionality for the Focus pomodoro app.
+  Timer functionality for the Focus app.
   """
 
   def start_countdown(minutes) do

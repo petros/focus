@@ -112,7 +112,7 @@ jobs:
           body: |
             ## Focus v${{ needs.check-version.outputs.new-version }}
             
-            A simple command-line pomodoro timer.
+            A simple command-line focus timer that helps you focus on work.
             
             ### Downloads
             - **focus-darwin-x86_64**: For Intel Macs

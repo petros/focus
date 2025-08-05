@@ -1,6 +1,6 @@
 defmodule Focus.CLI do
   @moduledoc """
-  Command line interface for the Focus pomodoro timer.
+  Command line interface for the Focus timer.
   """
 
   @default_work_minutes 25

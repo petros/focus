@@ -1,13 +1,13 @@
 # Focus
 
-A simple command-line pomodoro timer that does exactly one thing: count down from a specified time and play a sound when finished.
+A simple command-line focus timer that helps you focus on work. It does exactly one thing: count down from a specified time and play a sound when finished.
 
 ## Features
 
 - **Simple**: Just counts down and plays a sound
 - **Flexible timing**: Support for work sessions, breaks, and custom durations
 - **Visual feedback**: Live countdown display in your terminal
-- **Audio notification**: Plays macOS system sound (Glass.aiff) 3 times when timer expires
+- **Audio notification**: Plays system sound 3 times when timer expires (cross-platform)
 - **Standalone executable**: Single file you can run anywhere
 
 ## Usage
@@ -56,6 +56,6 @@ The timer displays a live countdown in MM:SS format and plays a notification sou
 ## Requirements
 
 - **Time range**: Custom times must be between 1 and 120 minutes
-- **Platform**: macOS (uses `afplay` for sound notifications)
-- **Sound file**: Uses system Glass.aiff sound
+- **Platform**: Cross-platform (macOS, Linux, Windows)
+- **Sound**: Uses platform-appropriate system sounds
 
