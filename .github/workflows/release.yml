@@ -85,68 +85,60 @@ jobs:
           # Initialize counters
           FOUND_FILES=0
           
-          # Find and process each platform's executable
-          find _build -name "focus*" -type f 2>/dev/null | while IFS= read -r filepath; do
-            if [ -f "$filepath" ]; then
-              filename=$(basename "$filepath")
-              filetype=$(file "$filepath" 2>/dev/null || echo "unknown")
-              
-              echo "Processing: $filepath"
-              echo "File type: $filetype"
-              
-              # Determine platform and final executable name
-              platform=""
-              executable_name=""
-              
-              if echo "$filetype" | grep -qi "mach-o.*x86_64"; then
-                platform="darwin-x86_64"
-                executable_name="focus"
-              elif echo "$filetype" | grep -qi "mach-o.*arm64\|mach-o.*aarch64"; then
-                platform="darwin-aarch64"
-                executable_name="focus"
-              elif echo "$filetype" | grep -qi "elf.*x86-64"; then
-                platform="linux-x86_64"
-                executable_name="focus"
-              elif echo "$filetype" | grep -qi "pe32\|ms-dos" || [[ "$filename" == *.exe ]]; then
-                platform="windows-x86_64"
-                executable_name="focus.exe"
-              elif [[ "$filename" == *.bat ]]; then
-                platform="windows-x86_64"
-                executable_name="focus.exe"
-              elif [[ "$filename" == "focus.rel" ]]; then
-                # Erlang release file - assume Linux
-                platform="linux-x86_64"
-                executable_name="focus"
-              else
-                echo "Skipping unknown file: $filename"
-                continue
+          # Process Burrito cross-platform executables
+          if [ -d "burrito_out" ]; then
+            echo "=== Processing Burrito outputs ==="
+            
+            # Map each Burrito output to platform-specific zip
+            declare -A burrito_mapping=(
+              ["focus_macos"]="darwin-x86_64"
+              ["focus_macos_m1"]="darwin-aarch64"
+              ["focus_linux"]="linux-x86_64"
+              ["focus_windows.exe"]="windows-x86_64"
+            )
+            
+            for burrito_file in burrito_out/*; do
+              if [ -f "$burrito_file" ]; then
+                filename=$(basename "$burrito_file")
+                platform=${burrito_mapping[$filename]}
+                
+                if [ -n "$platform" ]; then
+                  # Determine executable name in zip
+                  if [[ "$filename" == *.exe ]]; then
+                    executable_name="focus.exe"
+                  else
+                    executable_name="focus"
+                  fi
+                  
+                  echo "Processing $filename -> focus-$platform.zip ($executable_name)"
+                  
+                  # Create temporary directory
+                  temp_dir="release-assets/temp-$platform"
+                  mkdir -p "$temp_dir"
+                  
+                  # Copy with correct name
+                  cp "$burrito_file" "$temp_dir/$executable_name"
+                  chmod +x "$temp_dir/$executable_name"
+                  
+                  # Create zip
+                  cd "$temp_dir"
+                  zip "../focus-$platform.zip" "$executable_name"
+                  cd - > /dev/null
+                  
+                  # Clean up
+                  rm -rf "$temp_dir"
+                  
+                  FOUND_FILES=$((FOUND_FILES + 1))
+                else
+                  echo "Warning: Unknown Burrito output: $filename"
+                fi
               fi
-              
-              if [ -n "$platform" ] && [ -n "$executable_name" ]; then
-                # Create temporary directory for this platform
-                temp_dir="release-assets/temp-$platform"
-                mkdir -p "$temp_dir"
-                
-                # Copy file with correct name
-                echo "Creating $platform: $executable_name"
-                cp "$filepath" "$temp_dir/$executable_name"
-                chmod +x "$temp_dir/$executable_name"
-                
-                # Create the zip file
-                cd "$temp_dir"
-                zip "../focus-$platform.zip" "$executable_name"
-                cd - > /dev/null
-                
-                # Clean up temp directory
-                rm -rf "$temp_dir"
-                
-                echo $(($(cat /tmp/found_files_count 2>/dev/null || echo 0) + 1)) > /tmp/found_files_count
-              fi
-            fi
-          done
+            done
+          else
+            echo "ERROR: burrito_out directory not found!"
+            exit 1
+          fi
           
-          FOUND_FILES=$(cat /tmp/found_files_count 2>/dev/null || echo "0")
-          rm -f /tmp/found_files_count
           
           echo "=== Created $FOUND_FILES platform archives ==="
           echo "=== Final zip files ==="
