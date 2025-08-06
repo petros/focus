@@ -21,3 +21,6 @@ focus-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Burrito
+burrito_out/
