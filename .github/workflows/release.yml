@@ -70,7 +70,37 @@ jobs:
         run: mix deps.get
       
       - name: Build releases
-        run: mix release --overwrite
+        run: |
+          echo "=== Environment check ==="
+          echo "Zig version: $(zig version)"
+          echo "Platform: $(uname -a)"
+          echo "Current directory: $(pwd)"
+          
+          echo "=== Running mix release ==="
+          MIX_ENV=prod mix release --overwrite 2>&1 | tee build.log
+          
+          echo "=== Build log analysis ==="
+          if grep -i "burrito" build.log; then
+            echo "Burrito messages found in build log"
+          else
+            echo "No Burrito messages in build log - this suggests Burrito didn't run"
+          fi
+          
+          echo "=== Post-build directory check ==="
+          echo "Contents of current directory:"
+          ls -la
+          
+          echo "=== Checking for burrito_out ==="
+          if [ -d "burrito_out" ]; then
+            echo "burrito_out directory exists:"
+            ls -la burrito_out/
+            file burrito_out/*
+          else
+            echo "burrito_out directory NOT found"
+          fi
+          
+          echo "=== Checking _build structure ==="
+          find _build -name "*focus*" -type f -ls
         env:
           MIX_ENV: prod
       
@@ -85,58 +115,73 @@ jobs:
           # Initialize counters
           FOUND_FILES=0
           
-          # Process Burrito cross-platform executables
+          # Try to find Burrito outputs in multiple locations
+          burrito_dir=""
           if [ -d "burrito_out" ]; then
+            burrito_dir="burrito_out"
+            echo "Found burrito outputs in: burrito_out/"
+          elif [ -d "_build/prod/rel/focus/burrito_out" ]; then
+            burrito_dir="_build/prod/rel/focus/burrito_out" 
+            echo "Found burrito outputs in: _build/prod/rel/focus/burrito_out/"
+          else
+            echo "=== Searching for burrito outputs everywhere ==="
+            find . -name "*focus*macos*" -o -name "*focus*linux*" -o -name "*focus*windows*" 2>/dev/null || echo "No burrito-style outputs found"
+            echo "ERROR: No burrito outputs found!"
+            exit 1
+          fi
+          
+          if [ -n "$burrito_dir" ]; then
             echo "=== Processing Burrito outputs ==="
             
-            # Map each Burrito output to platform-specific zip
-            declare -A burrito_mapping=(
-              ["focus_macos"]="darwin-x86_64"
-              ["focus_macos_m1"]="darwin-aarch64"
-              ["focus_linux"]="linux-x86_64"
-              ["focus_windows.exe"]="windows-x86_64"
-            )
-            
-            for burrito_file in burrito_out/*; do
+            for burrito_file in "$burrito_dir"/*; do
               if [ -f "$burrito_file" ]; then
                 filename=$(basename "$burrito_file")
-                platform=${burrito_mapping[$filename]}
                 
-                if [ -n "$platform" ]; then
-                  # Determine executable name in zip
-                  if [[ "$filename" == *.exe ]]; then
-                    executable_name="focus.exe"
-                  else
+                # Map Burrito output to platform and executable name
+                case "$filename" in
+                  focus_macos)
+                    platform="darwin-x86_64"
                     executable_name="focus"
-                  fi
-                  
-                  echo "Processing $filename -> focus-$platform.zip ($executable_name)"
-                  
-                  # Create temporary directory
-                  temp_dir="release-assets/temp-$platform"
-                  mkdir -p "$temp_dir"
-                  
-                  # Copy with correct name
-                  cp "$burrito_file" "$temp_dir/$executable_name"
-                  chmod +x "$temp_dir/$executable_name"
-                  
-                  # Create zip
-                  cd "$temp_dir"
-                  zip "../focus-$platform.zip" "$executable_name"
-                  cd - > /dev/null
-                  
-                  # Clean up
-                  rm -rf "$temp_dir"
-                  
-                  FOUND_FILES=$((FOUND_FILES + 1))
-                else
-                  echo "Warning: Unknown Burrito output: $filename"
-                fi
+                    ;;
+                  focus_macos_m1)
+                    platform="darwin-aarch64"
+                    executable_name="focus"
+                    ;;
+                  focus_linux)
+                    platform="linux-x86_64"
+                    executable_name="focus"
+                    ;;
+                  focus_windows.exe)
+                    platform="windows-x86_64"
+                    executable_name="focus.exe"
+                    ;;
+                  *)
+                    echo "Warning: Unknown Burrito output: $filename"
+                    continue
+                    ;;
+                esac
+                
+                echo "Processing $filename -> focus-$platform.zip ($executable_name)"
+                
+                # Create temporary directory
+                temp_dir="release-assets/temp-$platform"
+                mkdir -p "$temp_dir"
+                
+                # Copy with correct name
+                cp "$burrito_file" "$temp_dir/$executable_name"
+                chmod +x "$temp_dir/$executable_name"
+                
+                # Create zip
+                cd "$temp_dir"
+                zip "../focus-$platform.zip" "$executable_name"
+                cd - > /dev/null
+                
+                # Clean up
+                rm -rf "$temp_dir"
+                
+                FOUND_FILES=$((FOUND_FILES + 1))
               fi
             done
-          else
-            echo "ERROR: burrito_out directory not found!"
-            exit 1
           fi
           
           
