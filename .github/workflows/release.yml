@@ -234,12 +234,22 @@ jobs:
             
             ### Usage
             
-            **macOS/Linux:**
+            **macOS:**
             ```bash
             # Extract and make executable
-            unzip focus-*.zip
-            chmod +x focus*
-            ./focus* [work|break|<minutes>]
+            unzip focus-darwin-*.zip
+            chmod +x focus
+            # Remove quarantine attribute to bypass security warning
+            xattr -d com.apple.quarantine focus
+            ./focus [work|break|<minutes>]
+            ```
+            
+            **Linux:**
+            ```bash
+            # Extract and make executable
+            unzip focus-linux-*.zip
+            chmod +x focus
+            ./focus [work|break|<minutes>]
             ```
             
             **Windows:**
